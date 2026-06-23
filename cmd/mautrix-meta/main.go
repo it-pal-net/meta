@@ -42,6 +42,16 @@ func main() {
 			m.Matrix.Capabilities.BatchSending = true
 			go m.Bridge.RunBackfillQueue()
 		}
+		// SyncContact fork-specific provisioning endpoint: lets the chat API
+		// delete all portal rooms owned by a login when a Meta connection is
+		// removed with "delete rooms". Mirrors the WhatsApp bridge; see
+		// customprovision.go.
+		if m.Matrix.Provisioning != nil {
+			m.Matrix.Provisioning.Router.HandleFunc(
+				"DELETE /v3/logins/{login_id}/portals",
+				deleteLoginPortals,
+			)
+		}
 	}
 	m.Run()
 }
