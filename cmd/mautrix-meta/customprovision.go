@@ -14,7 +14,43 @@ import (
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/bridgev2/matrix"
 	"maunium.net/go/mautrix/bridgev2/networkid"
+
+	"go.mau.fi/mautrix-meta/pkg/connector"
 )
+
+// provLoginSyncStatus returns a coarse "initial sync" status for one Meta login,
+// used to drive the unlinked-chat sync indicator. Mirrors the WhatsApp bridge's
+// endpoint of the same path; see pkg/connector/syncstatus.go.
+func provLoginSyncStatus(w http.ResponseWriter, r *http.Request) {
+	user := m.Matrix.Provisioning.GetUser(r)
+	if user == nil {
+		mautrix.MForbidden.WithMessage("Authenticated user not found").Write(w)
+		return
+	}
+
+	loginID := networkid.UserLoginID(r.PathValue("login_id"))
+	if loginID == "" {
+		mautrix.MInvalidParam.WithMessage("login_id is required").Write(w)
+		return
+	}
+
+	status, err := connector.GetLoginSyncStatusForLoginID(
+		r.Context(),
+		m.Bridge,
+		user.MXID,
+		loginID,
+	)
+	if err != nil {
+		hlog.FromRequest(r).Err(err).Str("login_id", string(loginID)).Msg("Failed to build login sync status")
+		matrix.RespondWithError(w, err, "Internal error loading sync status")
+		return
+	} else if status == nil {
+		mautrix.MNotFound.WithMessage("Login not found").Write(w)
+		return
+	}
+
+	exhttp.WriteJSONResponse(w, http.StatusOK, status)
+}
 
 // deleteLoginPortals deletes all Matrix portal rooms owned by a given login.
 // It is used when removing a Meta connection and its associated chat rooms.
