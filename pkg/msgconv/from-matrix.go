@@ -126,6 +126,25 @@ func (mc *MessageConverter) ToMeta(
 			// This might not actually be allowed
 			task.Text = content.Body
 		}
+	case event.MsgBeeperGallery:
+		// Meta sends an album as one message with several attachments, so each
+		// gallery item is uploaded and all attachment ids ride on a single task.
+		if len(content.BeeperGalleryImages) == 0 {
+			return nil, fmt.Errorf("%w: gallery has no media", bridgev2.ErrUnsupportedMessageType)
+		}
+		attachmentIDs := make([]int64, 0, len(content.BeeperGalleryImages))
+		for _, img := range content.BeeperGalleryImages {
+			attachmentID, err := mc.reuploadFileToMeta(ctx, client, portal, img)
+			if err != nil {
+				return nil, err
+			}
+			attachmentIDs = append(attachmentIDs, attachmentID)
+		}
+		task.SendType = table.MEDIA
+		task.AttachmentFBIds = attachmentIDs
+		if content.BeeperGalleryCaption != "" {
+			task.Text = content.BeeperGalleryCaption
+		}
 	case event.MsgLocation:
 		// TODO implement
 		fallthrough

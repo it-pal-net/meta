@@ -86,6 +86,38 @@ const (
 	facebookThumbsUpLargeStickerID  = 369239383222810
 )
 
+// Album grouping markers shared with the WhatsApp bridge and read by the
+// SyncContact client to group consecutive same-album media into one gallery.
+const (
+	AlbumIDCustomField    = "com.synccontact.album_id"
+	AlbumIndexCustomField = "com.synccontact.album_index"
+)
+
+// tagAlbumParts marks the photo/video parts of a multi-attachment message so the
+// client renders them as one gallery. The album id is the shared message id;
+// the index preserves order. Single-media messages are left untouched.
+func tagAlbumParts(parts []*bridgev2.ConvertedMessagePart, messageID networkid.MessageID) {
+	mediaParts := make([]*bridgev2.ConvertedMessagePart, 0, len(parts))
+	for _, part := range parts {
+		if part == nil || part.Content == nil {
+			continue
+		}
+		if part.Content.MsgType == event.MsgImage || part.Content.MsgType == event.MsgVideo {
+			mediaParts = append(mediaParts, part)
+		}
+	}
+	if len(mediaParts) < 2 {
+		return
+	}
+	for i, part := range mediaParts {
+		if part.Extra == nil {
+			part.Extra = map[string]any{}
+		}
+		part.Extra[AlbumIDCustomField] = string(messageID)
+		part.Extra[AlbumIndexCustomField] = i
+	}
+}
+
 func (mc *MessageConverter) ToMatrix(
 	ctx context.Context,
 	portal *bridgev2.Portal,
@@ -171,6 +203,10 @@ func (mc *MessageConverter) ToMatrix(
 		cm.Parts = append(cm.Parts, mc.stickerToMatrix(ctx, sticker))
 		importantPartIDs = append(importantPartIDs, partID)
 	}
+	// Meta delivers an album as one message with several photo/video attachments.
+	// Tag those media parts with a shared album id so the SyncContact client
+	// groups them into a single gallery bubble (matching the WhatsApp bridge).
+	tagAlbumParts(cm.Parts, messageID)
 	hasRelationSnippet := msg.ReplySnippet != "" && len(msg.XMAAttachments) > 0 && len(msg.XMAAttachments) != len(urlPreviews)
 	if msg.Text != "" || hasRelationSnippet || len(urlPreviews) > 0 {
 		mentions := &socket.MentionData{
