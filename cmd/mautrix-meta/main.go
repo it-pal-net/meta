@@ -55,6 +55,10 @@ func main() {
 				"DELETE /v3/logins/{login_id}/portals",
 				deleteLoginPortals,
 			)
+			m.Matrix.Provisioning.Router.HandleFunc(
+				"PUT /v3/portals/{roomID}/relay",
+				setPortalRelay,
+			)
 		}
 	}
 	m.Run()
