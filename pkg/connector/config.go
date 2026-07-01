@@ -47,6 +47,7 @@ type Config struct {
 	ReceiveInstagramTypingIndicators bool `yaml:"receive_instagram_typing_indicators"`
 	DisableViewOnce                  bool `yaml:"disable_view_once"`
 	MarketplaceSpace                 bool `yaml:"marketplace_space"`
+	AcceptMessageRequests            bool `yaml:"accept_message_requests"`
 	LogRedactedBloksPayloads         bool `yaml:"log_redacted_bloks_payloads"`
 
 	ThreadBackfill ThreadBackfillConfig `yaml:"thread_backfill"`
@@ -104,6 +105,7 @@ func upgradeConfig(helper up.Helper) {
 	helper.Copy(up.Bool, "receive_instagram_typing_indicators")
 	helper.Copy(up.Bool, "disable_view_once")
 	helper.Copy(up.Bool, "marketplace_space")
+	helper.Copy(up.Bool, "accept_message_requests")
 	helper.Copy(up.Bool, "log_redacted_bloks_payloads")
 	helper.Copy(up.Int, "thread_backfill", "batch_count")
 	helper.Copy(up.Str|up.Int, "thread_backfill", "batch_delay")

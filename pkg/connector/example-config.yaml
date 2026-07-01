@@ -56,6 +56,13 @@ receive_instagram_typing_indicators: true
 disable_view_once: false
 # Should FB marketplace chats have a separate space inside the main Facebook space?
 marketplace_space: true
+# Should incoming Instagram message requests (the "pending" folder) be accepted
+# automatically? When enabled, every message request thread is accepted as soon
+# as it's synced, moving it into the normal inbox so it shows up like any other
+# chat. Only implemented for Instagram; has no effect on Facebook/Messenger.
+# Note: accepting is a real Instagram action (it includes spam/unknown senders
+# and lets the sender see read receipts), and it can't be cleanly undone.
+accept_message_requests: false
 # Log raw Bloks payloads even at debug level, with any user identifiers or credentials redacted.
 log_redacted_bloks_payloads: false
 

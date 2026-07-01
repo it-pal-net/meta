@@ -114,6 +114,9 @@ func (evt *VerifyThreadExistsEvent) GetChatInfo(ctx context.Context, portal *bri
 	}
 	chatInfo := evt.m.makeMinimalChatInfo(evt.ThreadKey, evt.ThreadType, evt.ParentThreadKey)
 	chatInfo.MessageRequest = ptr.Ptr(evt.FolderName == folderPending)
+	if evt.FolderName == folderPending {
+		evt.m.maybeAutoAcceptMessageRequest(ctx, evt.ThreadKey)
+	}
 	return chatInfo, nil
 }
 

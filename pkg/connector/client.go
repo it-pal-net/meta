@@ -67,6 +67,11 @@ type MetaClient struct {
 	metaState status.BridgeState
 	waState   status.BridgeState
 
+	// Thread keys we've already tried to auto-accept as message requests, so a
+	// resync of a still-pending thread doesn't fire the accept mutation twice.
+	autoAcceptedRequests map[int64]struct{}
+	autoAcceptLock       sync.Mutex
+
 	waLastPresence   waTypes.Presence
 	igThreadIDs      map[string]int64
 	igUserIDs        map[string]int64
@@ -93,11 +98,12 @@ func (m *MetaConnector) LoadUserLogin(ctx context.Context, login *bridgev2.UserL
 
 		connectBackgroundWAOfflineSync: exsync.NewEvent(),
 
-		connectWaiter:     exsync.NewEvent(),
-		e2eeConnectWaiter: exsync.NewEvent(),
-		igThreadIDs:       map[string]int64{},
-		igUserIDs:         map[string]int64{},
-		igUserIDsReverse:  map[int64]string{},
+		connectWaiter:        exsync.NewEvent(),
+		e2eeConnectWaiter:    exsync.NewEvent(),
+		igThreadIDs:          map[string]int64{},
+		igUserIDs:            map[string]int64{},
+		igUserIDsReverse:     map[int64]string{},
+		autoAcceptedRequests: map[int64]struct{}{},
 	}
 	c.editChannels = exsync.NewMap[string, chan *FBEditEvent]()
 	login.Client = c

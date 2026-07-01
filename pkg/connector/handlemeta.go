@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -426,6 +427,9 @@ func (m *MetaClient) parseTable(ctx context.Context, tbl *table.LSTable) (innerQ
 
 			UncertainReceiver: thread.ThreadType == table.UNKNOWN_THREAD_TYPE,
 		}
+		if thread.GetFolderName() == folderPending {
+			m.maybeAutoAcceptMessageRequest(ctx, thread.ThreadKey)
+		}
 	}
 	for _, thread := range tbl.LSUpdateOrInsertThread {
 		thread.ThreadKey = params.MapWhatsAppThreadKey(thread.ThreadKey)
@@ -440,6 +444,9 @@ func (m *MetaClient) parseTable(ctx context.Context, tbl *table.LSTable) (innerQ
 			m:         m,
 
 			UncertainReceiver: thread.ThreadType == table.UNKNOWN_THREAD_TYPE,
+		}
+		if thread.GetFolderName() == folderPending {
+			m.maybeAutoAcceptMessageRequest(ctx, thread.ThreadKey)
 		}
 	}
 
@@ -599,13 +606,58 @@ func (m *MetaClient) handleDeleteThenInsertMessageRequest(tk handlerParams, msg 
 			return nil
 		}
 		tk.Sync.Info.MessageRequest = ptr.Ptr(isMessageRequest)
+		if isMessageRequest {
+			m.maybeAutoAcceptMessageRequest(tk.ctx, msg.ThreadKey)
+		}
 		return nil
+	}
+	if isMessageRequest {
+		m.maybeAutoAcceptMessageRequest(tk.ctx, msg.ThreadKey)
 	}
 	return m.wrapChatInfoChange(msg.ThreadKey, 0, tk.Type, &bridgev2.ChatInfoChange{
 		ChatInfo: &bridgev2.ChatInfo{
 			MessageRequest: ptr.Ptr(isMessageRequest),
 		},
 	}, "LSDeleteThenInsertMessageRequest")
+}
+
+// maybeAutoAcceptMessageRequest accepts an Instagram message request in the
+// background when the accept_message_requests config option is enabled. It is a
+// no-op for non-Instagram platforms (accepting is only implemented for
+// Instagram) and idempotent per thread: once an accept has been attempted for a
+// thread key, later resyncs of the same still-pending thread are ignored so we
+// don't fire the accept mutation repeatedly while the first call is in flight.
+func (m *MetaClient) maybeAutoAcceptMessageRequest(ctx context.Context, threadID int64) {
+	if !m.Main.Config.AcceptMessageRequests || !m.LoginMeta.Platform.IsInstagram() {
+		return
+	}
+	if m.Client == nil || m.Client.Instagram == nil {
+		return
+	}
+
+	m.autoAcceptLock.Lock()
+	if _, ok := m.autoAcceptedRequests[threadID]; ok {
+		m.autoAcceptLock.Unlock()
+		return
+	}
+	m.autoAcceptedRequests[threadID] = struct{}{}
+	m.autoAcceptLock.Unlock()
+
+	log := zerolog.Ctx(ctx).With().Int64("thread_id", threadID).Logger()
+	// Detach from the sync-handling context so the network call isn't cancelled
+	// when the current table finishes processing.
+	acceptCtx := context.WithoutCancel(ctx)
+	go func() {
+		if err := m.Client.Instagram.AcceptMessageRequest(acceptCtx, strconv.FormatInt(threadID, 10)); err != nil {
+			log.Err(err).Msg("Failed to auto-accept Instagram message request")
+			// Let a later resync retry the accept.
+			m.autoAcceptLock.Lock()
+			delete(m.autoAcceptedRequests, threadID)
+			m.autoAcceptLock.Unlock()
+			return
+		}
+		log.Info().Msg("Automatically accepted Instagram message request")
+	}()
 }
 
 func (m *MetaClient) handleDeleteThreadKey(tk handlerParams, threadKey int64, onlyForMe bool) bridgev2.RemoteEvent {
