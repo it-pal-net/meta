@@ -67,6 +67,7 @@ func (m *MetaClient) ResolveIdentifier(ctx context.Context, identifier string, c
 		}
 	}
 	ghost, _ := m.Main.Bridge.GetGhostByID(ctx, metaid.MakeUserID(id))
+	m.ensureIdentifiers(ghost)
 	return &bridgev2.ResolveIdentifierResponse{
 		UserID: metaid.MakeUserID(id),
 		Ghost:  ghost,

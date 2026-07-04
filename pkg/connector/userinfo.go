@@ -127,6 +127,23 @@ func (m *MetaClient) wrapUserInfo(info types.UserInfo) *bridgev2.UserInfo {
 	}
 }
 
+// ensureIdentifiers backfills a ghost's provisioning Identifiers from its stored
+// username when they were never populated. Ghosts created from thread/message
+// sync save their username in GhostMetadata but not their Identifiers, because
+// GetUserInfo only refetches full contact info when the display name is missing.
+// Without this, resolve_identifier omits the "instagram:<username>" handle even
+// though the bridge knows it.
+func (m *MetaClient) ensureIdentifiers(ghost *bridgev2.Ghost) {
+	if ghost == nil || len(ghost.Identifiers) > 0 || m.LoginMeta.Platform != types.Instagram {
+		return
+	}
+	meta, ok := ghost.Metadata.(*metaid.GhostMetadata)
+	if !ok || meta.Username == "" {
+		return
+	}
+	ghost.Identifiers = []string{fmt.Sprintf("instagram:%s", meta.Username)}
+}
+
 func wrapAvatar(avatarURL string) *bridgev2.Avatar {
 	if avatarURL == "" {
 		return &bridgev2.Avatar{Remove: true}
