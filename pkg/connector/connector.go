@@ -8,6 +8,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/commands"
 
+	"go.mau.fi/mautrix-meta/pkg/connector/discoverycommand"
 	"go.mau.fi/mautrix-meta/pkg/metadb"
 	"go.mau.fi/mautrix-meta/pkg/msgconv"
 )
@@ -18,6 +19,11 @@ type MetaConnector struct {
 	MsgConv     *msgconv.MessageConverter
 	DeviceStore *sqlstore.Container
 	DB          *metadb.MetaDB
+
+	// Publishes "run external-conversation discovery" commands on new inbound
+	// activity so new chats surface live without an operator reload (nil when no
+	// discovery_redis_url is configured). Mirrors the WhatsApp / Meta Business bridges.
+	DiscoveryCommand *discoverycommand.Publisher
 }
 
 var (
@@ -49,7 +55,30 @@ func (m *MetaConnector) Start(ctx context.Context) error {
 	if err != nil {
 		return bridgev2.DBUpgradeError{Err: err, Section: "meta"}
 	}
+
+	discoveryPublisher, err := discoverycommand.New(discoverycommand.Config{
+		RedisURL:       m.Config.DiscoveryRedisURL,
+		CommandsStream: m.Config.DiscoveryCommandsStream,
+		Debounce:       m.Config.DiscoveryCommandDebounce,
+	}, m.Bridge.Log)
+	if err != nil {
+		m.Bridge.Log.Warn().Err(err).Msg("Failed to init discovery command publisher; live new-chat discovery disabled")
+	} else {
+		m.DiscoveryCommand = discoveryPublisher
+	}
+
 	return nil
+}
+
+// scheduleDiscovery asks the SyncContact API to (re)run external-conversation
+// discovery for this login's workspace, so a brand-new inbound conversation
+// surfaces live instead of only after an operator reload. Debounced per login by
+// the publisher. No-op when discovery_redis_url is unset.
+func (m *MetaConnector) scheduleDiscovery(login *bridgev2.UserLogin, reason string) {
+	if login == nil || m.DiscoveryCommand == nil || !m.DiscoveryCommand.Enabled() {
+		return
+	}
+	m.DiscoveryCommand.Schedule(login.UserMXID, login.ID, reason)
 }
 
 func (m *MetaConnector) SetMaxFileSize(maxSize int64) {

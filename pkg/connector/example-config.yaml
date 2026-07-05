@@ -66,6 +66,13 @@ accept_message_requests: false
 # Log raw Bloks payloads even at debug level, with any user identifiers or credentials redacted.
 log_redacted_bloks_payloads: false
 
+# Publish "run external-conversation discovery" commands on new inbound activity so
+# brand-new chats surface live in the operator UI (no reload). stream:commands is
+# the chat-command-worker's queue. Empty disables it.
+discovery_redis_url: ""
+discovery_commands_stream: stream:commands
+discovery_command_debounce: 30s
+
 # Thread backfill settings for syncing older conversations
 thread_backfill:
   # Number of batches (pages) to backfill (-1 for unlimited, 0 to disable)

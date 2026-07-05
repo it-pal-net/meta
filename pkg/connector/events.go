@@ -132,10 +132,19 @@ var (
 	_ bridgev2.RemoteEventWithUncertainPortalReceiver = (*FBMessageEvent)(nil)
 	_ bridgev2.RemoteEventWithTimestamp               = (*FBMessageEvent)(nil)
 	_ bridgev2.RemoteEventWithStreamOrder             = (*FBMessageEvent)(nil)
+	_ bridgev2.RemotePostHandler                      = (*FBMessageEvent)(nil)
 )
 
 func (evt *FBMessageEvent) GetType() bridgev2.RemoteEventType {
 	return bridgev2.RemoteEventMessage
+}
+
+func (evt *FBMessageEvent) PostHandle(ctx context.Context, portal *bridgev2.Portal) {
+	// A new inbound message landed in a portal — nudge the API to (re)discover so
+	// a brand-new conversation surfaces live in the operator UI (debounced).
+	if portal != nil && portal.MXID != "" {
+		evt.m.Main.scheduleDiscovery(evt.m.UserLogin, "incoming_message_portal")
+	}
 }
 
 func (evt *FBMessageEvent) GetPortalKey() networkid.PortalKey {
@@ -303,7 +312,16 @@ var (
 	_ bridgev2.RemoteReactionRemove       = (*WAMessageEvent)(nil)
 	_ bridgev2.RemoteMessageRemove        = (*WAMessageEvent)(nil)
 	_ bridgev2.RemoteEventWithStreamOrder = (*WAMessageEvent)(nil)
+	_ bridgev2.RemotePostHandler          = (*WAMessageEvent)(nil)
 )
+
+func (evt *WAMessageEvent) PostHandle(ctx context.Context, portal *bridgev2.Portal) {
+	// Only a genuine inbound message (not an edit/reaction/remove) surfaces a new
+	// conversation — nudge the API to (re)discover so it shows live (debounced).
+	if portal != nil && portal.MXID != "" && evt.GetType() == bridgev2.RemoteEventMessage {
+		evt.m.Main.scheduleDiscovery(evt.m.UserLogin, "incoming_message_portal")
+	}
+}
 
 func (evt *WAMessageEvent) GetTargetMessage() networkid.MessageID {
 	if evt.Message == nil {

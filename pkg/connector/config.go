@@ -51,6 +51,13 @@ type Config struct {
 	LogRedactedBloksPayloads         bool `yaml:"log_redacted_bloks_payloads"`
 
 	ThreadBackfill ThreadBackfillConfig `yaml:"thread_backfill"`
+
+	// Publish "run external-conversation discovery" commands to the chat-command
+	// stream on new inbound activity, so new chats surface live in the operator UI
+	// (no reload). Empty disables it. Mirrors the WhatsApp / Meta Business bridges.
+	DiscoveryRedisURL        string        `yaml:"discovery_redis_url"`
+	DiscoveryCommandsStream  string        `yaml:"discovery_commands_stream"`
+	DiscoveryCommandDebounce time.Duration `yaml:"discovery_command_debounce"`
 }
 
 type ThreadBackfillConfig struct {
@@ -109,6 +116,9 @@ func upgradeConfig(helper up.Helper) {
 	helper.Copy(up.Bool, "log_redacted_bloks_payloads")
 	helper.Copy(up.Int, "thread_backfill", "batch_count")
 	helper.Copy(up.Str|up.Int, "thread_backfill", "batch_delay")
+	helper.Copy(up.Str|up.Null, "discovery_redis_url")
+	helper.Copy(up.Str|up.Null, "discovery_commands_stream")
+	helper.Copy(up.Str|up.Int, "discovery_command_debounce")
 }
 
 func (m *MetaConnector) GetConfig() (string, any, up.Upgrader) {
